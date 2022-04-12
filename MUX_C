@@ -1,0 +1,302 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <ctype.h>
+#include <time.h>
+
+// building data set
+struct Information{ // -WORKS-
+    unsigned int Write : 2; // 2 bit needed
+    unsigned int data : 32; // data size
+    unsigned int address : 32; // address size
+    unsigned int priorityBus : 2; // 2 bit needed
+};
+
+// building queue nodes based on linked list (dynamic memory)
+struct Node{ // -WORKS-
+    struct Information InfoData;
+    struct Node* next;
+};
+
+// determine flag size
+struct Flag{ // -WORKS-
+    unsigned int flag : 2; // flag size
+};
+
+// lines 26-31 using global variables for convenience
+struct Information B1, B2, B3, S1;
+
+struct Flag Ack;
+
+struct Node* front;
+struct Node* rear;
+
+int ProgramTimer(){ // -WORKS- using this function to simulate a real clock
+    time_t seconds;
+    seconds = time(NULL);
+    //"Seconds since January 1, 1970
+    int sec_clock=seconds%2; // 1(odd last digit)-> means high pulse || 2(even in last digit)-> means low pulse
+    return(sec_clock);
+}
+
+// printing all data that is wating to got through Slave
+void Print(){ // -WORKS-
+    struct Node* temp1;
+    temp1=front;
+    printf("\nBegin Print list:\n");
+    while(temp1!=NULL){
+        printf("%d\n", temp1->InfoData.address);
+        temp1=temp1->next;
+    }
+    printf("Done Printing");
+}
+
+int IsEmpty(){ // 0 is true -> means empty, 1 is false -> means has something inside -WORKS-
+    int bool_num=1;
+    if(front==NULL&&rear==NULL){
+        bool_num=0;
+    }
+    return(bool_num);
+}
+
+// checking the first data in queue that will proceed through Slave
+void Peek(){ // -WORKS-
+   int bool_num=IsEmpty();
+   if(bool_num==0){
+        printf("\nEmpty, nothing to see");
+        exit(0);
+   }
+   struct Node* temp1=front;
+   //return(temp1->InfoData.address);
+   printf("\n::Address priority is: %d::", temp1->InfoData.address);
+}
+
+// removing data from queue and sending through Slave
+void Dequeue(){ // -WORKS-
+    int clock_pulse=0;
+    while(clock_pulse==0){ // loop that makes sure that clock is '1' before going into slave
+        clock_pulse=ProgramTimer();
+        if(clock_pulse==1){
+            struct Node* temp1;
+            int num=IsEmpty();
+            if(num==0){
+                printf("\nEmpty!");
+                return(0);
+            }
+            temp1=front;
+            front=front->next;
+            printf("\nSlave Bus Information:");
+            printf("\nBus_Number: %d\tData: %d\tAddress: %d", temp1->InfoData.priorityBus, temp1->InfoData.data, temp1->InfoData.address);
+            printf("\n\n-Passed Successfully-\n");
+            free(temp1);
+        }
+    }
+    return;
+}
+
+// adding data from buses to queue in MUX
+void Enqueue(struct Information FullBus){ // -WORKS-
+    struct Node* temp1=(struct Node*)malloc(sizeof(struct Node*));
+    struct Node* temp2;
+    int num=IsEmpty();
+    if(num==0){
+        front=rear=temp1;
+    }
+    temp1->InfoData=FullBus;
+    temp2=rear;
+    rear=temp1;
+    temp2->next=temp1;
+    temp1->next=NULL;
+    return;
+}
+
+// checking Ack flag to make sure that the MUX can process the data
+void CheckAck(){ // -WORKS- checks if Ack should be '0' or '1'
+    if(Ack.flag==0){
+        if(B1.Write==1||B2.Write==1||B3.Write==1){
+            Ack.flag=1;
+        }
+    }
+}
+
+// after zipping all data into one file (done in main function), the function MasterBus uploads the data unto the buses themselves
+void MasterBus(){ // -WORKS-
+    int clock_pulse; // 0(low level) means off, 1(high level) means on
+    // TEST code to check overload memory - WORKS
+    /*
+    int count1=0;
+    while(count1!=5){
+        if(B1.Write==1 && Ack.flag==1){
+            B1.Write==0;
+            Ack.flag==0;
+            Enqueue(B1);
+        }
+        count1++;
+    }
+    */
+    CheckAck();
+    if(B1.Write==1 && Ack.flag==1){
+        B1.Write=0;
+        Ack.flag=0;
+        clock_pulse=0; // initiate as if off
+        while(clock_pulse==0){
+            clock_pulse=ProgramTimer();
+            if(clock_pulse==1){
+                Enqueue(B1);
+            }
+        }
+    }
+    CheckAck();
+    if(B2.Write==1 && Ack.flag==1){
+        B2.Write=0;
+        Ack.flag=0;
+        clock_pulse=0; // initiate as if off
+        while(clock_pulse==0){
+            clock_pulse=ProgramTimer();
+            if(clock_pulse==1){
+                Enqueue(B2);
+            }
+        }
+    }
+    CheckAck();
+    if(B3.Write==1 && Ack.flag==1){
+        B3.Write=0;
+        Ack.flag=0;
+        clock_pulse=0; // initiate as if off
+        while(clock_pulse==0){
+            clock_pulse=ProgramTimer();
+            if(clock_pulse==1){
+                Enqueue(B3);
+            }
+        }
+    }
+}
+
+void TestAck(){
+    if(Ack.flag==0){
+        if(B1.Write==1||B2.Write==1||B3.Write==1){
+            printf("\n::Ack Flag before loading bus into Arbiter: %d::\n", Ack);
+        }
+    }
+    CheckAck();
+    if(B1.Write==1 && Ack.flag==1){
+        printf("\n::Ack Flag while loading bus into Arbiter: %d::\n", Ack);
+    }
+}
+
+// test function
+void TestingFunc(){
+    int testData_1[6][4]={{1,111,100,1}, {1,14238,101,1},{0,18979,102,1},{1,1657,103,1},{0,0,0,0},{1,1464,104,1}};
+    int testData_2[6][4]={{1,222,200,2},{0,0,0,0}, {1,27653,201,2},{1,24345,202,2},{0,0,0,0},{0,245634,203,2}};
+    int testData_3[6][4]={{1,333,300,3},{0,345684,301,3}, {1,354321,302,3},{1,3098723,303,3},{0,0,0,0},{0,35461,304,3}};
+    // check priority levels
+    // check ack flag, ack-the transaction has ended successfully; '1' means its in transaction '0' in idle state
+    // check that all info exist, that the size of info on bus is 'x' bits
+    printf("What would you like to check:\n");
+    int userChoice=9, i, iMax;
+    int sum=0;
+    while(userChoice!=0){
+        printf("\n(1) Bus priority \n(2) Ack flag \n((0) Exit\n::");
+        scanf("%d", &userChoice);
+        if(userChoice==1){
+            Print();
+            B1.Write=testData_1[2][0];
+            B1.data=testData_1[2][1];
+            B1.address=testData_1[2][2];
+            B1.priorityBus=testData_1[2][3];
+            B2.Write=testData_2[2][0];
+            B2.data=testData_2[2][1];
+            B2.address=testData_2[2][2];
+            B2.priorityBus=testData_2[2][3];
+            B3.Write=testData_3[2][0];
+            B3.data=testData_3[2][1];
+            B3.address=testData_3[2][2];
+            B3.priorityBus=testData_3[2][3];
+            MasterBus();
+            Print();
+            Peek();
+        }
+        if(userChoice==2){
+            B1.Write=testData_1[0][0];
+            B1.data=testData_1[0][1];
+            B1.address=testData_1[0][2];
+            B1.priorityBus=testData_1[0][3];
+            TestAck();
+        }
+        if(userChoice==3){
+            printf("%d", sizeof(struct Information));
+        }
+        if(userChoice==0){
+            printf("\nThank you for testing the system");
+        }
+    }
+}
+
+int main()
+{
+    int userChoice=9;
+    while(userChoice!=0){
+        printf("\n(1) Test system:\n(2) Use system:\n(0) Exit\n::");
+        scanf("%d", &userChoice);
+        if(userChoice==1){
+            TestingFunc();
+        }
+
+        if(userChoice==2){
+            //{Write,data,address,priorityBus}
+            //data set in arrays for multiple testing
+            int B1data[6][4]={{1,111,100,1}, {1,14238,101,1},{0,18979,102,1},{1,1657,103,1},{0,0,0,0},{1,1464,104,1}};
+            int B2data[6][4]={{1,222,200,2},{0,0,0,0}, {1,27653,201,2},{1,24345,202,2},{0,0,0,0},{0,245634,203,2}};
+            int B3data[6][4]={{1,333,300,3},{0,345684,301,3}, {1,354321,302,3},{1,3098723,303,3},{0,0,0,0},{0,35461,304,3}};
+            Ack.flag=0; // start with accepting data into the Arbiter
+            front=rear=NULL; // we start with an empty queue
+            // creating an example of data flowing through the buses
+            // to make the code easier to understand
+            int i,iMax=6;
+            Ack.flag=0; // start with accepting data into the Arbiter
+            front=rear=NULL; // we start with an empty queue
+            // creating an example of data flowing through the buses
+            // to make the code easier to understand
+            for(i=0;i<iMax;i++){
+                    // Bus 1
+                    B1.Write=B1data[i][0];
+                    B1.data=B1data[i][1];
+                    B1.address=B1data[i][2];
+                    B1.priorityBus=B1data[i][3];
+                    // Bus 2
+                    B2.Write=B2data[i][0];
+                    B2.data=B2data[i][1];
+                    B2.address=B2data[i][2];
+                    B2.priorityBus=B2data[i][3];
+                    // Bus 3
+                    B3.Write=B3data[i][0];
+                    B3.data=B3data[i][1];
+                    B3.address=B3data[i][2];
+                    B3.priorityBus=B3data[i][3];
+                    MasterBus();
+                    Print();
+                    int j=0;
+                    if(i>2 && i<iMax){
+
+                        while(j<3){
+                            Dequeue();
+                            j++;
+                        }
+                    Print();
+                    }
+                }
+            //Peek();
+            //
+            /*
+            Print();
+            Dequeue();
+            Print();
+            Dequeue();
+            Print();
+            */
+        }
+        if(userChoice==0){
+                printf("\nThank you for using the program\n");
+            exit(0);
+        }
+    }
+}
